@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>スイングスタック</title>
+<style>
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #05070f;
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", "Noto Sans SC", Roboto, Arial, sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
+  #wrap {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 20%, #12213a, #05070f 60%);
+  }
+
+  /* 縦長 9:16 を維持 */
+  #frame {
+    position: relative;
+    width: min(100vw, calc(100vh * 9 / 16));
+    height: min(100vh, calc(100vw * 16 / 9));
+    background: #0a1020;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+
+  #hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    padding: 8px;
+  }
+
+  #hud .hudTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  #hud .stats {
+    flex: 1;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  #hud .stat {
+    display: block;
+    font-size: clamp(10px, 2.8vw, 15px);
+    line-height: 1.25;
+    opacity: .92;
+  }
+
+  .hudBtn {
+    pointer-events: auto;
+    border: 0;
+    border-radius: 999px;
+    min-width: 38px;
+    min-height: 30px;
+    padding: 6px 10px;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    font-size: clamp(12px, 3vw, 15px);
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+  }
+
+  .hudBtn:active {
+    transform: scale(.95);
+    background: rgba(255,255,255,.2);
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 18px;
+    background: rgba(5,8,16,.94);
+    backdrop-filter: blur(6px);
+  }
+
+  .hidden { display: none !important; }
+
+  .title {
+    margin: 0;
+    font-weight: 900;
+    letter-spacing: .04em;
+    font-size: clamp(30px, 10vw, 54px);
+    color: #ffd35d;
+    text-shadow: 0 0 18px rgba(255,211,93,.35), 0 0 40px rgba(255,211,93,.18);
+    text-align: center;
+  }
+
+  .tag {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: clamp(12px, 3.3vw, 16px);
+    line-height: 1.55;
+    opacity: .88;
+    max-width: 92%;
+  }
+
+  .btn {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 16px;
+    min-width: 180px;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    font-size: clamp(13px, 3.4vw, 17px);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .btn:hover { background: rgba(255,255,255,.18); }
+  .btn:active { transform: scale(.96); }
+
+  .primary {
+    background: #ffd35d;
+    color: #111;
+    font-weight: 800;
+  }
+
+  .btnRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .langRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  .langRow button {
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    font-size: clamp(11px, 2.8vw, 13px);
+    cursor: pointer;
+  }
+
+  .langRow button.active {
+    background: #ffd35d;
+    color: #111;
+    font-weight: 800;
+    border-color: transparent;
+  }
+
+  .small {
+    font-size: clamp(10px, 2.7vw, 13px);
+    opacity: .62;
+    text-align: center;
+    max-width: 90%;
+    line-height: 1.45;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(100%, 380px);
+  }
+
+  #selectTitle, #resultTitle {
+    font-weight: 800;
+    font-size: clamp(15px, 4vw, 20px);
+    letter-spacing: .04em;
+  }
+
+  #resultScore, #resultBest {
+    font-size: clamp(13px, 3.6vw, 17px);
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  #stageGrid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+    width: min(100%, 380px);
+    max-height: 58vh;
+    overflow: auto;
+    padding-bottom: 8px;
+  }
+
+  .stageCell {
+    position: relative;
+    aspect-ratio: 1;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(255,255,255,.10);
+    color: #fff;
+    font-size: clamp(10px, 2.7vw, 14px);
+    font-weight: 800;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .stageCell small {
+    display: block;
+    margin-top: 2px;
+    font-size: clamp(7px, 1.8vw, 10px);
+    font-weight: 600;
+    opacity: .75;
+  }
+
+  .stageCell.locked {
+    opacity: .22;
+    cursor: not-allowed;
+  }
+
+  .stageCell:not(.locked):active {
+    transform: scale(.94);
+    background: rgba(255,255,255,.18);
+  }
+
+  .stageCell:not(.locked) {
+    background: linear-gradient(135deg, rgba(255,211,93,.24), rgba(255,255,255,.08));
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="frame">
+    <canvas id="game"></canvas>
+
+    <!-- 遊んでいるときのHUD -->
+    <div id="hud" class="hidden">
+      <div class="hudTop">
+        <button id="backBtn" class="hudBtn">←</button>
+        <div class="stats">
+          <span class="stat" id="hudStage"></span>
+          <span class="stat" id="hudTarget"></span>
+          <span class="stat" id="hudHeight"></span>
+          <span class="stat" id="hudBest"></span>
+        </div>
+        <button id="soundBtn" class="hudBtn">🔊</button>
+      </div>
+    </div>
+
+    <!-- メニュー -->
+    <div id="menu" class="screen">
+      <h1 class="title" id="titleText"></h1>
+      <p class="tag" id="tagText"></p>
+      <button id="startBtn" class="btn primary"></button>
+      <button id="stageSelectBtn" class="btn"></button>
+      <div class="langRow">
+        <button data-lang="ja">日本語</button>
+        <button data-lang="en">English</button>
+        <button data-lang="zh">中文</button>
+      </div>
+      <div class="small" id="menuInfo"></div>
+    </div>
+
+    <!-- ステージ選択 -->
+    <div id="stageSelect" class="screen hidden">
+      <div class="row">
+        <button id="stageBack" class="btn"></button>
+        <div id="selectTitle"></div>
+      </div>
+      <div id="stageGrid"></div>
+    </div>
+
+    <!-- 結果 -->
+    <div id="result" class="screen hidden">
+      <div id="resultTitle"></div>
+      <div id="resultScore"></div>
+      <div id="resultBest"></div>
+      <div class="btnRow">
+        <button id="retryBtn" class="btn"></button>
+        <button id="nextBtn" class="btn primary hidden"></button>
+        <button id="resultMenuBtn" class="btn"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<script>
+/* =========================================================
+   SWING STACK / スイングスタック / 摇摆高塔
+   HTML / Canvas / Matter.js / localStorage
+   ========================================================= */
+
+const $ = (sel) => document.querySelector(sel);
+
+const SAVE_KEY = "swing_stack_v1";
+const W = 480;
+const H = 854;
+const GROUND_Y = 760;
+const UNIT = 20;
+const STAGE_COUNT = 30;
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let Engine, Bodies, Composite, Events, Body, Sleeping;
+let engine = null;
+let world = null;
+let matterLoaded = typeof Matter !== "undefined";
+
+let state = "menu"; // menu / stageSelect / playing / result
+
+let stageIndex = 1;
+let currentDef = null;
+
+let currentPart = null;
+let lastDropped = null;
+let dropped = [];
+
+let nextPartTimer = 0;
+let resolveTimer = 0;
+
+let targetM = 0;
+let heightM = 0;
+let stableTimer = 0;
+
+let cameraY = 0;
+let lastHook = { x: W / 2, y: 200 };
+
+let swingTime = 0;
+let rng = 123456;
+let partCount = 0;
+
+let dpr = 1;
+
+let audioCtx = null;
+let lastLandSound = 0;
+
+/* =========================================================
+   多言語
+   ========================================================= */
+const I18N = {
+  ja: {
+    title: "スイングスタック",
+    tag: "左右に揺れるクレーンからタイミングよくパーツを落とし、どこまで高くバランスよく積めるかを競うアクション。",
+    play: "ゲーム開始",
+    stages: "ステージ選択",
+    back: "戻る",
+    target: "目標",
+    height: "現在の高さ",
+    best: "記録",
+    stage: "STAGE",
+    soundOn: "音 ON",
+    soundOff: "音 OFF",
+    clear: "ステージクリア！",
+    fail: "バランスを崩しました",
+    retry: "リトライ",
+    next: "次のステージ",
+    menu: "メニュー",
+    locked: "ロック中",
+    m: "m",
+    info: "タップ / クリック / スペースキー でブロックを落とす",
+    tip: "重心を下層に、土台の中央で安定させよう。",
+    newRecord: "新記録！",
+    matterError: "物理エンジン(Matter.js)を読み込めませんでした。"
+  },
+  en: {
+    title: "SWING STACK",
+    tag: "Drop parts from a swinging crane. Stack them as high and balanced as you can.",
+    play: "Start",
+    stages: "Stage Select",
+    back: "Back",
+    target: "Target",
+    height: "Height",
+    best: "Best",
+    stage: "STAGE",
+    soundOn: "Sound ON",
+    soundOff: "Sound OFF",
+    clear: "Stage Clear!",
+    fail: "Balance Lost",
+    retry: "Retry",
+    next: "Next Stage",
+    menu: "Menu",
+    locked: "Locked",
+    m: "m",
+    info: "Tap / Click / Space to drop",
+    tip: "Keep the center of gravity low and centered.",
+    newRecord: "New Record!",
+    matterError: "Failed to load physics engine (Matter.js)."
+  },
+  zh: {
+    title: "摇摆高塔",
+    tag: "从左右摆动的起重机上，把握时机落下零件，挑战能叠多高。",
+    play: "开始游戏",
+    stages: "关卡选择",
+    back: "返回",
+    target: "目标高度",
+    height: "当前高度",
+    best: "最高记录",
+    stage: "关卡",
+    soundOn: "音效 ON",
+    soundOff: "音效 OFF",
+    clear: "关卡通过！",
+    fail: "平衡失败",
+    retry: "重试",
+    next: "下一关",
+    menu: "菜单",
+    locked: "未解锁",
+    m: "m",
+    info: "点击 / 触摸 / 空格 落下零件",
+    tip: "把重心压低，并对准底座中心。",
+    newRecord: "新记录！",
+    matterError: "无法加载物理引擎(Matter.js)。"
+  }
+};
+
+let save = {
+  unlocked: 1,
+  best: {},
+  sound: true,
+  lang: "ja"
+};
+
+function defaultLang() {
+  const l = (navigator.language || "").toLowerCase();
+  if (l.startsWith("zh")) return "zh";
+  if (l.startsWith("en")) return "en";
+  return "ja";
+}
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      save = {
+        unlocked: Number(data.unlocked) || 1,
+        best: data.best && typeof data.best === "object" ? data.best : {},
+        sound: data.sound !== false,
+        lang: ["ja", "en", "zh"].includes(data.lang) ? data.lang : defaultLang()
+      };
+    } else {
+      save.lang = defaultLang();
+    }
+  } catch (e) {
+    save.lang = defaultLang();
+  }
+
+  save.unlocked = Math.max(1, Math.min(STAGE_COUNT, save.unlocked || 1));
+  if (!save.best) save.best = {};
+  save.sound = save.sound !== false;
+  if (!["ja", "en", "zh"].includes(save.lang)) save.lang = defaultLang();
+}
+
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  } catch (e) {
+    /* 保存できない環境は無視 */
+  }
+}
+
+function t(key) {
+  const pack = I18N[save.lang] || I18N.en;
+  return pack[key] || I18N.en[key] || key;
+}
+
+/* =========================================================
+   パーツ定義
+   ========================================================= */
+const PART_DEFS = [
+  { name: "BOX",   type: "rect", w: 60,  h: 34, color: "#ffb066" },
+  { name: "BOARD", type: "rect", w: 100, h: 24, color: "#67d7ff" },
+  { name: "BLOCK", type: "rect", w: 40,  h: 36, color: "#78ff9b" },
+  { name: "BAR",   type: "rect", w: 30,  h: 74, color: "#ff667a" },
+  { name: "PLATE", type: "rect", w: 140, h: 16, color: "#73ffd7" },
+  { name: "BIG",   type: "rect", w: 120, h: 44, color: "#bb7cff" },
+  { name: "HEX",   type: "poly", sides: 6,  r: 28, color: "#ff9955" },
+  { name: "ROUND", type: "poly", sides: 14, r: 26, color: "#ff66c8" }
+];
+
+function stageDef(n) {
+  const s = Math.max(1, Math.min(n, STAGE_COUNT));
+
+  const baseWidth = Math.max(120, 250 - (s - 1) * 4);
+  const target = Math.min(20, 3 + Math.round((s - 1) * 0.55));
+  const swingSpeed = Math.min(1.9, 0.75 + (s - 1) * 0.04);
+  const swingAmp = Math.min(0.42, 0.20 + (s - 1) * 0.008);
+
+  // 最初は安定パーツ。後半ほど難しいパーツが増える。
+  const allowed = [0, 1, 2];
+  if (s >= 4)  allowed.push(3); // BAR
+  if (s >= 7)  allowed.push(4); // PLATE
+  if (s >= 10) allowed.push(6); // HEX
+  if (s >= 13) allowed.push(5); // BIG
+  if (s >= 16) allowed.push(7); // ROUND
+
+  return {
+    target,
+    baseWidth,
+    swingSpeed,
+    swingAmp,
+    allowed
+  };
+}
+
+function rnd() {
+  // xorshift
+  if (rng === 0) rng = 123456789;
+  rng = (rng ^ (rng << 13)) >>> 0;
+  rng = (rng ^ (rng >>> 17)) >>> 0;
+  rng = (rng ^ (rng << 5)) >>> 0;
+  return rng / 4294967296;
+}
+
+/* =========================================================
+   UI
+   ========================================================= */
+function applyUI() {
+  document.documentElement.lang = save.lang;
+  document.title = t("title");
+
+  $("#titleText").textContent = t("title");
+  $("#tagText").textContent = t("tag") + "\n" + t("tip");
+
+  if (!matterLoaded) {
+    $("#startBtn").disabled = true;
+    $("#startBtn").textContent = t("matterError");
+    $("#menuInfo").textContent = t("matterError");
+  } else {
+    $("#startBtn").disabled = false;
+    $("#startBtn").textContent = t("play");
+    $("#menuInfo").textContent = t("info");
+  }
+
+  $("#stageSelectBtn").textContent = t("stages");
+  $("#backBtn").textContent = "←";
+  $("#backBtn").title = t("back");
+  $("#soundBtn").textContent = save.sound ? "🔊" : "🔇";
+  $("#soundBtn").title = save.sound ? t("soundOn") : t("soundOff");
+
+  $("#stageBack").textContent = t("back");
+  $("#selectTitle").textContent = t("stages");
+
+  $("#retryBtn").textContent = t("retry");
+  $("#nextBtn").textContent = t("next");
+  $("#resultMenuBtn").textContent = t("menu");
+
+  document.querySelectorAll(".langRow button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.lang === save.lang);
+  });
+
+  buildStageButtons();
+
+  if (state === "playing") updateHUD();
+}
+
+function buildStageButtons() {
+  const grid = $("#stageGrid");
+  if (!grid) return;
+
+  grid.innerHTML = "";
+
+  for (let n = 1; n <= STAGE_COUNT; n++) {
+    const unlocked = n <= save.unlocked;
+    const best = save.best[n] || 0;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "stageCell" + (unlocked ? "" : " locked");
+    btn.innerHTML = `<span>${n}</span>`;
+
+    if (best > 0) {
+      const small = document.createElement("small");
+      small.textContent = best + t("m");
+      btn.appendChild(small);
+    }
+
+    if (!unlocked) {
+      btn.disabled = true;
+      btn.title = t("locked");
+    } else {
+      btn.addEventListener("click", () => {
+        ensureAudio();
+        playClick();
+        startStage(n);
+      });
+    }
+
+    grid.appendChild(btn);
+  }
+}
+
+function hideScreens() {
+  ["#menu", "#stageSelect", "#result"].forEach((id) => {
+    const el = $(id);
+    if (el) el.classList.add("hidden");
+  });
+}
+
+function showMenu() {
+  state = "menu";
+  hideScreens();
+  $("#menu").classList.remove("hidden");
+  $("#hud").classList.add("hidden");
+  currentPart = null;
+  lastDropped = null;
+}
+
+function showStageSelect() {
+  state = "menu";
+  hideScreens();
+  $("#stageSelect").classList.remove("hidden");
+  $("#hud").classList.add("hidden");
+  buildStageButtons();
+}
+
+function showResult(won, newRecord) {
+  state = "result";
+  hideScreens();
+  $("#hud").classList.add("hidden");
+  $("#result").classList.remove("hidden");
+
+  $("#resultTitle").textContent = won ? t("clear") : t("fail");
+  $("#resultScore").textContent = `${t("height")} ${heightM}${t("m")}`;
+
+  const best = save.best[stageIndex] || 0;
+  $("#resultBest").textContent =
+    `${t("best")} ${best}${t("m")}` + (newRecord ? ` ${t("newRecord")}` : "");
+
+  const showNext = won && stageIndex < STAGE_COUNT;
+  $("#nextBtn").classList.toggle("hidden", !showNext);
+
+  $("#retryBtn").textContent = t("retry");
+  $("#nextBtn").textContent = t("next");
+  $("#resultMenuBtn").textContent = t("menu");
+}
+
+function updateHUD() {
+  if (!currentDef) return;
+
+  const best = save.best[stageIndex] || 0;
+
+  $("#hudStage").textContent = `${t("stage")} ${stageIndex}/${STAGE_COUNT}`;
+  $("#hudTarget").textContent = `${t("target")} ${targetM}${t("m")}`;
+  $("#hudHeight").textContent = `${t("height")} ${heightM}${t("m")}`;
+  $("#hudBest").textContent = `${t("best")} ${best}${t("m")}`;
+}
+
+/* =========================================================
+   物理エンジン初期化
+   ========================================================= */
+function initEngine() {
+  Engine = Matter.Engine;
+  Bodies = Matter.Bodies;
+  Composite = Matter.Composite;
+  Events = Matter.Events;
+  Body = Matter.Body;
+  Sleeping = Matter.Sleeping;
+
+  engine = Engine.create({ enableSleeping: true });
+  engine.gravity.x = 0;
+  engine.gravity.y = 1;
+  engine.positionIterations = 12;
+  engine.velocityIterations = 10;
+
+  world = engine.world;
+
+  Events.on(engine, "collisionStart", handleCollision);
+}
+
+function clearWorld() {
+  if (!world) return;
+  Composite.clear(world, false);
+  currentPart = null;
+  lastDropped = null;
+  dropped = [];
+}
+
+function startStage(n) {
+  if (!matterLoaded) return;
+
+  ensureAudio();
+
+  stageIndex = Math.max(1, Math.min(n, STAGE_COUNT));
+  currentDef = stageDef(stageIndex);
+
+  targetM = currentDef.target;
+  heightM = 0;
+  stableTimer = 0;
+
+  dropped = [];
+  currentPart = null;
+  lastDropped = null;
+
+  nextPartTimer = 0.8;
+  resolveTimer = 0;
+  partCount = 0;
+
+  cameraY = 0;
+  swingTime = Math.random() * 10;
+  rng = (stageIndex * 987654321 + 777777) >>> 0;
+  if (rng === 0) rng = 123456789;
+
+  Composite.clear(world, false);
+
+  const platform = Bodies.rectangle(
+    W / 2,
+    GROUND_Y + 10,
+    currentDef.baseWidth,
+    20,
+    {
+      isStatic: true,
+      friction: 1.0,
+      restitution: 0
+    }
+  );
+  platform.gameType = "platform";
+  Composite.add(world, platform);
+
+  state = "playing";
+  hideScreens();
+  $("#hud").classList.remove("hidden");
+  updateHUD();
+}
+
+function spawnCurrent() {
+  if (!currentDef) return;
+
+  const allowed = currentDef.allowed;
+  const def = PART_DEFS[allowed[Math.floor(rnd() * allowed.length)]];
+
+  const options = {
+    friction: 0.95,
+    frictionStatic: 1.4,
+    restitution: 0.02,
+    density: 0.001
+  };
+
+  let body;
+  const y = 270 + cameraY;
+
+  if (def.type === "rect") {
+    const r = Math.max(1, Math.min(3, def.w * 0.12, def.h * 0.12));
+    options.chamfer = { radius: r };
+    body = Bodies.rectangle(W / 2, y, def.w, def.h, options);
+  } else {
+    body = Bodies.polygon(W / 2, y, def.sides, def.r, options);
+  }
+
+  body.gameType = "part";
+  body.color = def.color;
+  body.label = def.name;
+
+  // 吊っている最中は衝突しない
+  body.collisionFilter.category = 0x0002;
+  body.collisionFilter.mask = 0;
+
+  Composite.add(world, body);
+  currentPart = body;
+  partCount++;
+}
+
+function dropCurrent() {
+  if (!currentPart) return;
+
+  const b = currentPart;
+
+  // 落下可能にする
+  b.collisionFilter.category = 0x0001;
+  b.collisionFilter.mask = 0xFFFFFFFF;
+
+  Body.setVelocity(b, { x: 0, y: 0 });
+  Body.setAngularVelocity(b, 0);
+  if (Sleeping) Sleeping.set(b, false);
+
+  dropped.push(b);
+  lastDropped = b;
+  currentPart = null;
+  resolveTimer = 0;
+
+  nextPartTimer = 9999;
+  playDrop();
+}
+
+/* =========================================================
+   ゲーム更新
+   ========================================================= */
+function update(dt) {
+  if (state !== "playing" || !matterLoaded || !engine) return;
+
+  const def = currentDef;
+
+  // クレーンの揺れ
+  swingTime += dt;
+  const angle = Math.sin(swingTime * def.swingSpeed) * def.swingAmp;
+  const pivotX = W / 2;
+  const pivotY = 70;
+  const arm = 130;
+
+  lastHook.x = pivotX + Math.sin(angle) * arm;
+  lastHook.y = pivotY + Math.cos(angle) * arm;
+
+  // 次のパーツ生成
+  if (!currentPart && !lastDropped) {
+    nextPartTimer -= dt;
+    if (nextPartTimer <= 0) spawnCurrent();
+  }
+
+  // 物理
+  Engine.update(engine, 1000 / 60);
+
+  // カメラ
+  updateCamera(dt);
+
+  // 吊っているパーツは画面に固定して追従
+  if (currentPart) {
+    const attachOffset = 75;
+    Body.setPosition(currentPart, {
+      x: lastHook.x,
+      y: lastHook.y + attachOffset + cameraY
+    });
+    Body.setAngle(currentPart, 0);
+    Body.setVelocity(currentPart, { x: 0, y: 0 });
+    Body.setAngularVelocity(currentPart, 0);
+    if (Sleeping) Sleeping.set(currentPart, false);
+    currentPart.collisionFilter.category = 0x0002;
+    currentPart.collisionFilter.mask = 0;
+  }
+
+  // 落下失敗
+  if (checkFail()) return;
+
+  // 高さ
+  updateHeight();
+
+  // 落としたパーツが落ち着くまで待機
+  if (lastDropped) {
+    resolveTimer += dt;
+
+    const v = lastDropped.velocity || { x: 0, y: 0 };
+    const speed =
+      Math.hypot(v.x, v.y) + Math.abs(lastDropped.angularVelocity || 0) * 30;
+
+    const slow = speed < 0.35;
+
+    if (
+      lastDropped.isSleeping ||
+      resolveTimer > 3.2 ||
+      (slow && resolveTimer > 1.6)
+    ) {
+      lastDropped = null;
+      nextPartTimer = 0.55;
+      stableTimer = 0;
+    }
+  }
+
+  // クリア判定
+  if (heightM >= targetM && !currentPart && !lastDropped) {
+    if (bodiesAtRest()) stableTimer += dt;
+    else stableTimer = 0;
+
+    if (stableTimer > 0.9) {
+      win();
+      return;
+    }
+  } else {
+    stableTimer = 0;
+  }
+
+  updateHUD();
+}
+
+function updateCamera(dt) {
+  let top = GROUND_Y;
+
+  // 最後に落としたパーツは、画面が引っ張られすぎないよう一時的に除外
+  for (const b of dropped) {
+    if (b === lastDropped) continue;
+    if (b.bounds && b.bounds.min.y < top) top = b.bounds.min.y;
+  }
+
+  const desired = Math.min(0, top - H * 0.45);
+  cameraY += (desired - cameraY) * Math.min(1, dt * 5);
+}
+
+function updateHeight() {
+  let top = GROUND_Y;
+
+  for (const b of dropped) {
+    if (b.bounds && b.bounds.min.y < top) top = b.bounds.min.y;
+  }
+
+  heightM = Math.max(0, Math.floor((GROUND_Y - top) / UNIT));
+}
+
+function checkFail() {
+  for (const b of dropped) {
+    if (!b || !b.bounds) continue;
+
+    // 土台より下へ落ちたら失敗
+    if (b.bounds.min.y > GROUND_Y + 80) {
+      fail();
+      return true;
+    }
+
+    // 落下中に画面下へ消えていったら失敗
+    const vy = b.velocity ? b.velocity.y : 0;
+    if (!b.isSleeping && vy > 2.5 && b.bounds.min.y > cameraY + H + 200) {
+      fail();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function bodiesAtRest() {
+  if (dropped.length === 0) return false;
+
+  for (const b of dropped) {
+    if (b.isSleeping) continue;
+
+    const v = b.velocity || { x: 0, y: 0 };
+    if (Math.hypot(v.x, v.y) > 0.25) return false;
+    if (Math.abs(b.angularVelocity || 0) > 0.03) return false;
+  }
+
+  return true;
+}
+
+function win() {
+  if (state !== "playing") return;
+
+  state = "result";
+  const newRecord = updateRecord(heightM, true);
+  playWin();
+  showResult(true, newRecord);
+}
+
+function fail() {
+  if (state !== "playing") return;
+
+  state = "result";
+  const newRecord = updateRecord(heightM, false);
+  playFail();
+  showResult(false, newRecord);
+}
+
+function updateRecord(score, won) {
+  let newRecord = false;
+
+  if (score > 0 && score > (save.best[stageIndex] || 0)) {
+    save.best[stageIndex] = score;
+    newRecord = true;
+  }
+
+  if (won && stageIndex < STAGE_COUNT) {
+    save.unlocked = Math.max(save.unlocked, stageIndex + 1);
+  }
+
+  saveGame();
+  return newRecord;
+}
+
+/* =========================================================
+   衝突音
+   ========================================================= */
+function handleCollision(event) {
+  if (state !== "playing" || !save.sound) return;
+
+  const now = performance.now();
+  if (now - lastLandSound < 80) return;
+
+  for (const pair of event.pairs) {
+    const a = pair.bodyA;
+    const b = pair.bodyB;
+
+    if (a.isStatic && b.isStatic) continue;
+    if (a.gameType !== "part" && b.gameType !== "part") continue;
+
+    const rvx = (a.velocity ? a.velocity.x : 0) - (b.velocity ? b.velocity.x : 0);
+    const rvy = (a.velocity ? a.velocity.y : 0) - (b.velocity ? b.velocity.y : 0);
+    const speed = Math.hypot(rvx, rvy);
+
+    if (speed > 1.5) {
+      lastLandSound = now;
+      const freq = Math.min(420, 130 + speed * 4);
+      const vol = Math.min(0.12, 0.025 + speed * 0.004);
+      playTone(freq, 0.09, "sine", vol);
+    }
+  }
+}
+
+/* =========================================================
+   描画
+   ========================================================= */
+function fit() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  drawBackground();
+
+  if (matterLoaded && world) {
+    drawWorld();
+  }
+
+  if (state === "playing") {
+    drawCrane();
+  }
+}
+
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#07101f");
+  g.addColorStop(0.55, "#0c1629");
+  g.addColorStop(1, "#070d18");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // 高さメモリ
+  ctx.save();
+  for (let m = 0; m <= 50; m += 1) {
+    const y = GROUND_Y - m * UNIT - cameraY;
+    if (y < -2 || y > H + 2) continue;
+
+    ctx.strokeStyle =
+      m % 5 === 0
+        ? "rgba(255,255,255,.08)"
+        : "rgba(255,255,255,.03)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, Math.floor(y) + 0.5);
+    ctx.lineTo(W, Math.floor(y) + 0.5);
+    ctx.stroke();
+
+    if (m % 5 === 0) {
+      ctx.fillStyle = "rgba(255,255,255,.24)";
+      ctx.font = "10px system-ui";
+      ctx.textAlign = "right";
+      ctx.fillText(m + "m", W - 6, y - 3);
+    }
+  }
+
+  // 中央ガイド
+  ctx.strokeStyle = "rgba(255,255,255,.035)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 0);
+  ctx.lineTo(W / 2, H);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawWorld() {
+  // 目標線
+  if (currentDef) {
+    const targetY = GROUND_Y - targetM * UNIT - cameraY;
+    if (targetY > -30 && targetY < H + 30) {
+      ctx.save();
+      ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = "rgba(255,75,95,.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, targetY);
+      ctx.lineTo(W, targetY);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  const bodies = Composite.allBodies(world);
+  for (const b of bodies) {
+    drawBody(b);
+  }
+}
+
+function drawBody(body) {
+  if (!body || !body.vertices) return;
+
+  ctx.save();
+
+  ctx.beginPath();
+  const vs = body.vertices;
+  for (let i = 0; i < vs.length; i++) {
+    const x = vs[i].x;
+    const y = vs[i].y - cameraY;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+
+  if (body.gameType === "platform") {
+    ctx.fillStyle = "#4d5a83";
+  } else {
+    ctx.fillStyle = body.color || "#ddd";
+  }
+
+  ctx.fill();
+
+  ctx.lineWidth = 2;
+
+  if (body.gameType === "platform") {
+    ctx.strokeStyle = "rgba(255,255,255,.35)";
+  } else if (body === currentPart) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = "rgba(255,255,255,.85)";
+  } else {
+    ctx.strokeStyle = "rgba(255,255,255,.65)";
+  }
+
+  ctx.stroke();
+  ctx.restore();
+
+  // 土台の支柱
+  if (body.gameType === "platform") {
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,.08)";
+    const w = body.bounds.max.x - body.bounds.min.x;
+    const y = body.bounds.max.y - cameraY;
+    ctx.fillRect(body.bounds.min.x, y, w, 70);
+    ctx.restore();
+  }
+}
+
+function drawCrane() {
+  const pivotX = W / 2;
+  const pivotY = 70;
+
+  // レール
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,.08)";
+  ctx.fillRect(0, 18, W, 8);
+  ctx.restore();
+
+  // 支点
+  ctx.save();
+  ctx.fillStyle = "#ffd35d";
+  ctx.beginPath();
+  ctx.arc(pivotX, pivotY, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // アーム
+  ctx.save();
+  ctx.strokeStyle = "#ffd35d";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(pivotX, pivotY);
+  ctx.lineTo(lastHook.x, lastHook.y);
+  ctx.stroke();
+  ctx.restore();
+
+  // 針
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,.9)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(lastHook.x, lastHook.y, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // 吊っているパーツへロープ
+  if (currentPart && currentPart.bounds) {
+    const topY = currentPart.bounds.min.y - cameraY;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,.7)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(lastHook.x, lastHook.y + 9);
+    ctx.lineTo(currentPart.position.x, topY);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* =========================================================
+   サウンド
+   ========================================================= */
+function ensureAudio() {
+  if (!audioCtx) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    } catch (e) {
+      audioCtx = null;
+    }
+  }
+
+  if (audioCtx && audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+}
+
+function playTone(freq, dur = 0.1, type = "sine", vol = 0.08) {
+  if (!save.sound) return;
+  ensureAudio();
+  if (!audioCtx) return;
+
+  try {
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(t0);
+    osc.stop(t0 + dur);
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function playClick() {
+  playTone(650, 0.05, "square", 0.035);
+}
+
+function playDrop() {
+  playTone(260, 0.08, "triangle", 0.05);
+}
+
+function playWin() {
+  const notes = [659, 784, 988, 1319];
+  notes.forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.22, "triangle", 0.08), i * 130);
+  });
+}
+
+function playFail() {
+  playTone(300, 0.16, "sawtooth", 0.07);
+  setTimeout(() => playTone(150, 0.38, "sawtooth", 0.08), 140);
+}
+
+/* =========================================================
+   メインループ
+   ========================================================= */
+let lastTime = performance.now();
+
+function loop(now) {
+  requestAnimationFrame(loop);
+
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  if (state === "playing" && matterLoaded) {
+    update(dt);
+  }
+
+  render();
+}
+
+/* =========================================================
+   イベント
+   ========================================================= */
+function setupEvents() {
+  document.addEventListener("pointerdown", () => {
+    ensureAudio();
+  });
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (state !== "playing") return;
+    e.preventDefault();
+    ensureAudio();
+    dropCurrent();
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+
+    if (state === "playing" && (e.code === "Space" || e.code === "Enter")) {
+      e.preventDefault();
+      ensureAudio();
+      dropCurrent();
+    }
+  });
+
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  window.addEventListener("resize", fit);
+
+  $("#startBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    startStage(Math.min(save.unlocked, STAGE_COUNT));
+  });
+
+  $("#stageSelectBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    showStageSelect();
+  });
+
+  $("#stageBack").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    showMenu();
+  });
+
+  $("#backBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    showMenu();
+    clearWorld();
+  });
+
+  $("#soundBtn").addEventListener("click", () => {
+    ensureAudio();
+    save.sound = !save.sound;
+    saveGame();
+    applyUI();
+    playClick();
+  });
+
+  document.querySelectorAll(".langRow button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      ensureAudio();
+      playClick();
+      save.lang = btn.dataset.lang;
+      saveGame();
+      applyUI();
+    });
+  });
+
+  $("#retryBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    startStage(stageIndex);
+  });
+
+  $("#nextBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    startStage(Math.min(STAGE_COUNT, stageIndex + 1));
+  });
+
+  $("#resultMenuBtn").addEventListener("click", () => {
+    ensureAudio();
+    playClick();
+    showMenu();
+    clearWorld();
+  });
+}
+
+/* =========================================================
+   起動
+   ========================================================= */
+loadSave();
+applyUI();
+
+if (matterLoaded) {
+  initEngine();
+}
+
+fit();
+setupEvents();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
